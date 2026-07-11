@@ -11,15 +11,46 @@ usage() {
   cat <<'EOF'
 unc — your lazy senior dev, equipped.
 
-  unc stats      show what the benchmark has tracked (tokens, code churn)
-  unc on|off     turn the always-on rule on or off
-  unc status     one-line status (for a statusline)
-  unc where      print paths unc uses
-  unc version    print version
-  unc help       this
+  unc stats            what the benchmark tracked + savings (honest, tiered)
+  unc stats --share    a copy-paste receipt card for the timeline
+  unc stats --how      how the numbers are calculated (+ link to METHODOLOGY.md)
+  unc on | off         turn the always-on rule on or off
+  unc status           one-line status (for a statusline)
+  unc where            print paths unc uses
+  unc uninstall        remove unc (hooks + cli); keeps your log
+  unc version          print version
+  unc help             this
 
 The rule (ponytail + caveman + codedb) and the benchmark run from hooks.
-See the repo README to wire the statusline.
+EOF
+}
+
+how() {
+  cat <<'EOF'
+how big unc gets the number
+
+  a hook logs your real output tokens + lines changed every turn. big unc takes
+  that and applies each tool's OWN published benchmark — one tool per thing, so
+  nothing is counted twice:
+
+    caveman  cuts your OUTPUT   -65%   →  output tokens saved = your output × 65%
+    ponytail cuts your CODE     -54%   →  lines saved         = your lines  × 54%
+    codedb   cuts your CONTEXT   —      →  leaner input, no clean % to claim
+
+    $ saved  =  output tokens saved  ×  UNC_PRICE   (output only, never cache)
+
+  they don't overlap — one shrinks what the model says, one shrinks what it
+  writes, one shrinks what it reads — so adding them is fair, not double-dipping.
+
+  it IS a guesstimate, on purpose: you only did each task once, so the "without
+  unc" version was never written and nobody can truly measure it. ponytail's own
+  tool refuses to guess a live number. big unc guesses from the benchmarks and
+  says so, right on the card: "trust me bro".
+
+  (run `unc off` a few times → upgrades to a real on-vs-off measurement of YOUR
+   own output-per-line, no guessing.)
+
+  full math + sources → github.com/0ss/unc/blob/main/METHODOLOGY.md
 EOF
 }
 
@@ -30,61 +61,94 @@ case "${1:-help}" in
   where)
     echo "log      $LOG"
     echo "flag     $UNC_DIR/off (present = off)" ;;
+  uninstall)
+    for s in "$UNC_DIR/src/uninstall.sh" "$(dirname "$0")/../uninstall.sh"; do
+      [ -f "$s" ] && exec bash "$s" "${2:-}"
+    done
+    echo "uninstaller not found — grab it: bash <(curl -fsSL https://raw.githubusercontent.com/0ss/unc/main/uninstall.sh)"; exit 1 ;;
   version|--version|-v) echo "unc $VERSION" ;;
   stats)
+    case "${2:-}" in --how) how; exit 0 ;; esac
     command -v jq >/dev/null 2>&1 || { echo "need jq for stats"; exit 1; }
     [ -f "$LOG" ] || { echo "no sessions logged yet — go build something."; exit 0; }
-    # savings, done honestly. two modes:
-    #   MEASURED — once you have >=3 `unc off` sessions, compare your own
-    #     on vs off cohort means (tokens + code). that delta is YOUR real
-    #     reduction and it captures codedb's leaner-context effect for free.
-    #   SEED — until then, one tool per disjoint axis, each with its OWN
-    #     published number, no double-counting:
-    #       caveman  -> output tokens, 65% cut  => baseline out/0.35
-    #       ponytail -> code, 54% less          => baseline ins/0.46
-    #     codedb is deliberately NOT in seed: its 1600x win is per search
-    #     query, not per session, so guessing a session % would be a lie.
-    #     it shows up only once MEASURED mode has real data.
-    # $/Mtok drifts + depends on your model -> knob.
+    share=0; [ "${2:-}" = "--share" ] && share=1
+    # savings, done honestly — see `unc stats --how` / METHODOLOGY.md.
+    #   MEASURED: words-per-line-of-code, on vs off, median, output-only $.
+    #     the one thing your own logs can actually prove.
+    #   ESTIMATE (seed): your real output tokens * ponytail's published -22%.
+    #     labeled "trust me bro" — an extrapolation, not a measurement.
+    #   LINES saved is always a ponytail-lab estimate (-54%): no counterfactual.
     price="${UNC_PRICE:-15}"
     min_off="${UNC_MIN_OFF:-3}"
-    jq -s -r --argjson price "$price" --argjson minoff "$min_off" '
-      def k: if . >= 1000 then "\((./1000)|floor)k" else "\(.)" end;
-      def mean(f): if length>0 then (map(f)|add)/length else 0 end;
+    jq -s -r --argjson price "$price" --argjson minoff "$min_off" --argjson share "$share" '
+      def k: if . >= 1000 then "\((./1000)|floor)k" else "\(.|floor)" end;
+      def usd: (.*100|round/100);
+      def clamp: if . < 0 then 0 elif . > 100 then 100 else . end;
+      def med($a): ($a|length) as $l
+        | if $l==0 then 0 elif ($l%2==1) then $a[($l/2|floor)]
+          else (($a[($l/2)-1] + $a[$l/2]) / 2) end;
+      def bar($p): ($p|clamp) as $q | ($q/10|floor) as $f
+        | (reduce range(0;$f)    as $_ (""; . + "█"))
+        + (reduce range(0;10-$f) as $_ (""; . + "░"));
+
       ( [ .[] | select((.rule // "on") == "on")  ] ) as $on
       | ( [ .[] | select((.rule // "on") == "off") ] ) as $off
       | ( length ) as $n
-      | ( $on | length ) as $non
+      | ( $on  | length ) as $non
       | ( $off | length ) as $noff
+      | ( $on  | map(.out_tokens)|add // 0 ) as $out_on
       | ( map(.out_tokens)|add // 0 ) as $out
       | ( map(.in_tokens) |add // 0 ) as $in
+      | ( $on  | map(.insertions)|add // 0 ) as $ins_on
       | ( map(.insertions)|add // 0 ) as $ins
       | ( map(.deletions) |add // 0 ) as $del
-      | ( if $noff >= $minoff
+      # words-per-line rates, code sessions only (insertions>0)
+      | ( [ $on[]  | select(.insertions>0) | (.out_tokens/.insertions) ] | sort ) as $onr
+      | ( [ $off[] | select(.insertions>0) | (.out_tokens/.insertions) ] | sort ) as $offr
+      | ( $offr | length ) as $noffc
+      | ( if $noffc >= $minoff and ($onr|length) > 0
           then
-            ( (($off|mean(.out_tokens)) - ($on|mean(.out_tokens))
-             + ($off|mean(.in_tokens))  - ($on|mean(.in_tokens))) * $non ) as $t
-            | ( (($off|mean(.insertions)) - ($on|mean(.insertions))) * $non ) as $l
-            | { mode:"measured",
-                tok: ($t | if . < 0 then 0 else . end | floor),
-                loc: ($l | if . < 0 then 0 else . end | floor) }
+            med($offr) as $or | med($onr) as $nr
+            | ( if $or > $nr then $or - $nr else 0 end ) as $per
+            | ( if $or > 0 then (($or - $nr)/$or*100 | clamp) else 0 end ) as $pct
+            | { mode:"measured", ncode:$noffc, rate_on:$nr, rate_off:$or, tokpct:$pct,
+                tok: ($per * $ins_on | floor),
+                loc: ($ins_on * 0.54/0.46 | floor) }
           else
-            { mode:"seed",
-              tok: (($on|map(.out_tokens)|add // 0) * 0.65/0.35 | floor),
-              loc: (($on|map(.insertions)|add // 0) * 0.54/0.46 | floor) }
+            { mode:"seed", ncode:$noffc, tokpct:65,
+              tok: ($out_on * 0.65/0.35 | floor),
+              loc: ($ins_on * 0.54/0.46 | floor) }
           end ) as $s
-      | ( $s.tok / 1000000 * $price ) as $usd
-      | ( if $s.mode == "measured"
-          then "  🦥 big unc MEASURED ~\($s.tok|k) tokens + ~\($s.loc) LOC saved · ~$\($usd|.*100|round/100)\n" +
-               "     from your own A/B — \($non) on vs \($noff) off sessions. real shit.\n\n"
-          else "  🦥 big unc reckons ~\($s.tok|k) tokens + ~\($s.loc) LOC saved · ~$\($usd|.*100|round/100)\n" +
-               "     (est · trust me bro) caveman 65% output + ponytail 54% code · run `unc off` \($minoff)+ times for a real A/B (adds codedb)\n\n"
-          end ) +
-        "unc stats — \($n) sessions (\($non) on, \($noff) off)\n" +
-        "  output tokens   \($out)\n" +
-        "  input tokens    \($in)\n" +
-        "  net LOC         \($ins - $del)  (+\($ins) / -\($del))\n" +
-        (if $n > 0 then "  avg out/session \(($out / $n) | floor)" else "" end)
+      | ( $s.tok/1000000*$price ) as $usd
+      | ( if $s.mode=="measured"
+          then (if $s.ncode>=20 then "solid" elif $s.ncode>=8 then "measured" else "preliminary" end)
+          else "estimate" end ) as $conf
+      # ansi
+      | "[0m" as $x | "[1m" as $b | "[2m" as $d
+      | "[32m" as $g | "[36m" as $c | "[33m" as $y
+      | ( if $s.mode=="measured" then "\($s.tokpct|floor)% · \($conf) · n=\($s.ncode)"
+          else "65% · caveman" end ) as $toklbl
+      | if $share == 1 then
+          "\n  🦥 \($b)unc wrapped\($x)  \($d)\($conf)\($x)\n\n" +
+          "     \($g)\($b)\($s.tok|k)\($x) \($d)output tokens saved\($x)   \($y)~$\($usd|usd)\($x)\n\n" +
+          "     \($c)output \($x)  \(bar($s.tokpct))  \($d)-\($toklbl)\($x)\n" +
+          "     \($c)code   \($x)  \(bar(54))  \($d)-54% · ponytail est\($x)\n" +
+          "     \($c)context\($x)  ██████████  \($d)codedb · leaner in\($x)\n\n" +
+          "     \($d)\($n) sessions · \($non) on / \($noff) off · math → unc stats --how\($x)\n" +
+          "     \($d)github.com/0ss/unc\($x)"
+        else
+          ( if $s.mode=="measured"
+            then "  🦥 \($b)big unc MEASURED\($x) ~\($s.tok|k) output tokens saved · ~$\($usd|usd)  \($d)(\($conf), n=\($s.ncode))\($x)\n" +
+                 "     words/line rule-on \(($s.rate_on*10|round/10)) vs off \(($s.rate_off*10|round/10)) — your own on/off. lines -54% is a ponytail lab est.\n\n"
+            else "  🦥 \($b)big unc reckons\($x) ~\($s.tok|k) output tokens saved · ~$\($usd|usd)  \($d)(guesstimate · trust me bro)\($x)\n" +
+                 "     caveman -65% output + ponytail -54% code + codedb leaner context. ponytail won'\''t guess live; big unc will — and says so.\n\n"
+            end ) +
+          "unc stats — \($n) sessions (\($non) on, \($noff) off)\n" +
+          "  output tokens   \($out)\n" +
+          "  input tokens    \($in)  \($d)(incl cache — not counted as $ saved)\($x)\n" +
+          "  net LOC         \($ins - $del)  (+\($ins) / -\($del))\n" +
+          "  lines saved     ~\($s.loc)  \($d)(ponytail lab est, -54%)\($x)"
+        end
     ' "$LOG" ;;
   help|-h|--help) usage ;;
   *) echo "unknown: $1"; echo; usage; exit 1 ;;
