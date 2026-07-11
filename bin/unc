@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# unc — tiny CLI. Toggle the rule, read your numbers.
+set -euo pipefail
+
+UNC_DIR="$HOME/.unc"
+LOG="$UNC_DIR/sessions.ndjson"
+mkdir -p "$UNC_DIR"
+
+usage() {
+  cat <<'EOF'
+unc — your lazy senior dev, equipped.
+
+  unc stats      show what the benchmark has tracked (tokens, code churn)
+  unc on|off     turn the always-on rule on or off
+  unc status     one-line status (for a statusline)
+  unc where      print paths unc uses
+  unc help       this
+
+The rule (ponytail + caveman + codedb) and the benchmark run from hooks.
+See the repo README to wire the statusline.
+EOF
+}
+
+case "${1:-help}" in
+  on)   rm -f "$UNC_DIR/off"; echo "unc on — ponytail + caveman + codedb enforced." ;;
+  off)  : > "$UNC_DIR/off"; echo "unc off — rule silenced (hooks still installed)." ;;
+  status) exec "$(dirname "$0")/../hooks/unc-status.sh" ;;
+  where)
+    echo "log      $LOG"
+    echo "flag     $UNC_DIR/off (present = off)" ;;
+  stats)
+    command -v jq >/dev/null 2>&1 || { echo "need jq for stats"; exit 1; }
+    [ -f "$LOG" ] || { echo "no sessions logged yet — go build something."; exit 0; }
+    jq -s -r '
+      ( length ) as $n
+      | ( map(.out_tokens) | add // 0 ) as $out
+      | ( map(.in_tokens)  | add // 0 ) as $in
+      | ( map(.insertions) | add // 0 ) as $ins
+      | ( map(.deletions)  | add // 0 ) as $del
+      | "unc stats — \($n) sessions\n" +
+        "  output tokens   \($out)\n" +
+        "  input tokens    \($in)\n" +
+        "  lines added     \($ins)\n" +
+        "  lines removed   \($del)\n" +
+        "  net LOC         \($ins - $del)\n" +
+        (if $n > 0 then "  avg out/session \(($out / $n) | floor)" else "" end)
+    ' "$LOG" ;;
+  help|-h|--help) usage ;;
+  *) echo "unknown: $1"; echo; usage; exit 1 ;;
+esac
