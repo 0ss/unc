@@ -1,3 +1,9 @@
 .DS_Store
 *.log
 node_modules/
+
+# codedb index artifact (generated per machine)
+codedb.snapshot
+
+# machine-specific local settings
+.claude/settings.local.json

@@ -34,30 +34,32 @@ check "out tokens summed" "$(jq -r .out_tokens <<<"$line")" "140"
 check "in tokens + cache" "$(jq -r .in_tokens  <<<"$line")" "1510"
 check "insertions"        "$(jq -r .insertions <<<"$line")" "2"
 
-# --- unc stats: aggregate two known rows ---
+# --- unc stats: rows are CUMULATIVE per session; stats must take max, not sum ---
+# one session, two cumulative turns: out grows 100->300, ins 3->5. take the max.
 cat > "$HOME/.unc/sessions.ndjson" <<'JSON'
-{"ts":"x","cwd":"/a","out_tokens":100,"in_tokens":10,"files":1,"insertions":5,"deletions":1}
-{"ts":"y","cwd":"/a","out_tokens":300,"in_tokens":20,"files":2,"insertions":5,"deletions":4}
+{"session":"s1","cwd":"/a","rule":"on","out_tokens":100,"in_tokens":10,"codedb":1,"insertions":3,"deletions":0}
+{"session":"s1","cwd":"/a","rule":"on","out_tokens":300,"in_tokens":20,"codedb":4,"insertions":5,"deletions":1}
 JSON
 out="$(bash "$ROOT/bin/unc" stats | noansi)"
-check "session count" "$(grep -c '2 sessions' <<<"$out")" "1"
-check "net loc"       "$(grep -oE 'net LOC +[0-9]+' <<<"$out" | grep -oE '[0-9]+' | head -1)" "5"
-# no off-sessions -> ESTIMATE (seed). output tokens: caveman 400*.65/.35 floored = 742.
-# lines est: ponytail ins 10 * .54/.46 floored = 11 (always est, never "measured")
+check "turns/sessions" "$(grep -c '2 turns across 1 sessions' <<<"$out")" "1"
+# deduped: out=max(100,300)=300, ins=max=5, del=max=1 -> net 4 (NOT summed 400/10/5)
+check "net loc"       "$(grep -oE 'net LOC +[0-9]+' <<<"$out" | grep -oE '[0-9]+' | head -1)" "4"
+check "dedup tokens"  "$(grep -oE 'output tokens   [0-9]+' <<<"$out" | grep -oE '[0-9]+')" "300"
+check "codedb max"    "$(grep -oE 'codedb queries  [0-9]+' <<<"$out" | grep -oE '[0-9]+')" "4"
+# seed: out_on 300 * .65/.35 = 557 ; lines 5 * .54/.46 = 5
 check "seed mode"       "$(grep -c 'trust me bro' <<<"$out")" "1"
-check "seed tokens"     "$(grep -oE 'reckons ~[0-9]+ output tokens' <<<"$out" | grep -oE '[0-9]+')" "742"
-check "seed loc est"    "$(grep -oE 'lines saved     ~[0-9]+' <<<"$out" | grep -oE '[0-9]+')" "11"
+check "seed tokens"     "$(grep -oE 'reckons ~[0-9]+ output tokens' <<<"$out" | grep -oE '[0-9]+')" "557"
+check "seed loc est"    "$(grep -oE 'lines saved     ~[0-9]+' <<<"$out" | grep -oE '[0-9]+')" "5"
 
-# --- measured mode: words-per-line rate, on vs off, median, output-only ---
-# on rate = out/ins = 50/10 = 5 (x2). off rate = 100/10 = 10 (x3).
-# median off 10 - median on 5 = 5 saved/line. on lines shipped = 20. tok = 5*20 = 100.
-# lines saved stays a ponytail est: 20 * .54/.46 = 23.
+# --- measured mode: per-SESSION words/line rate, on vs off, median ---
+# 2 on sessions rate 50/10=5, 3 off sessions rate 100/10=10. med off 10 - on 5 = 5.
+# on lines shipped = 20. tok = 5*20 = 100. lines est 20*.54/.46 = 23.
 cat > "$HOME/.unc/sessions.ndjson" <<'JSON'
-{"rule":"on","out_tokens":50,"in_tokens":0,"insertions":10,"deletions":0}
-{"rule":"on","out_tokens":50,"in_tokens":0,"insertions":10,"deletions":0}
-{"rule":"off","out_tokens":100,"in_tokens":0,"insertions":10,"deletions":0}
-{"rule":"off","out_tokens":100,"in_tokens":0,"insertions":10,"deletions":0}
-{"rule":"off","out_tokens":100,"in_tokens":0,"insertions":10,"deletions":0}
+{"session":"on1","rule":"on","out_tokens":50,"in_tokens":0,"insertions":10,"deletions":0}
+{"session":"on2","rule":"on","out_tokens":50,"in_tokens":0,"insertions":10,"deletions":0}
+{"session":"off1","rule":"off","out_tokens":100,"in_tokens":0,"insertions":10,"deletions":0}
+{"session":"off2","rule":"off","out_tokens":100,"in_tokens":0,"insertions":10,"deletions":0}
+{"session":"off3","rule":"off","out_tokens":100,"in_tokens":0,"insertions":10,"deletions":0}
 JSON
 m="$(bash "$ROOT/bin/unc" stats | noansi)"
 check "measured mode"   "$(grep -c 'MEASURED' <<<"$m")" "1"
@@ -69,7 +71,7 @@ check "measured rate"   "$(grep -c 'rule-on 5 vs off 10' <<<"$m")" "1"
 sc="$(bash "$ROOT/bin/unc" stats --share | noansi)"
 check "share card"     "$(grep -c 'unc wrapped' <<<"$sc")" "1"
 check "share tokens"   "$(grep 'output tokens saved' <<<"$sc" | grep -oE '[0-9]+' | head -1)" "100"
-check "share loc est"  "$(grep -c 'ponytail est' <<<"$sc")" "1"
+check "share loc est"  "$(grep -c 'ponytail' <<<"$sc")" "1"
 
 # --- --how prints methodology, no crash on empty-ish ---
 check "how link" "$(bash "$ROOT/bin/unc" stats --how | grep -c 'METHODOLOGY.md')" "1"

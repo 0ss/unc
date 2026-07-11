@@ -3,6 +3,12 @@
 notable changes. newest on top.
 
 ## unreleased
+- **fix: stats no longer 10x-overcounts.** rows are cumulative per session;
+  stats now de-dupes by session and takes the max, not the sum. (~11x too high
+  before → honest number.) hook logs a session id + codedb query count.
+- codedb estimate: counts codedb queries/session, shows "~Xk tokens not read vs
+  grep+file" — kept out of $ (input/cache). knob: UNC_CODEDB_PER_Q.
+- receipt card renders in bash truecolor with a real ascii sloth (assets/) + colored bars
 - `unc stats --share` — Wrapped-style receipt card, wears its confidence tier
 - reworked savings math, grounded in each tool's own benchmark, one per axis:
   - estimate = caveman -65% output + ponytail -54% code + codedb context (named)
