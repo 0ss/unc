@@ -31,18 +31,24 @@ case "${1:-help}" in
   stats)
     command -v jq >/dev/null 2>&1 || { echo "need jq for stats"; exit 1; }
     [ -f "$LOG" ] || { echo "no sessions logged yet — go build something."; exit 0; }
-    jq -s -r '
+    # saved = estimate. caveman's own number is a 65% output cut, so a verbose
+    # baseline would be out/0.35 and the gap is what unc's terseness saved.
+    # $/Mtok output drifts + depends on your model, so it's a knob.
+    price="${UNC_PRICE:-15}"
+    jq -s -r --argjson price "$price" '
       ( length ) as $n
       | ( map(.out_tokens) | add // 0 ) as $out
       | ( map(.in_tokens)  | add // 0 ) as $in
       | ( map(.insertions) | add // 0 ) as $ins
       | ( map(.deletions)  | add // 0 ) as $del
-      | "unc stats — \($n) sessions\n" +
+      | ( ($out * 0.65 / 0.35) | floor ) as $saved
+      | ( $saved / 1000000 * $price ) as $usd
+      | "  🦴 unc saved you ~\(if $saved >= 1000 then "\(($saved/1000)|floor)k" else "\($saved)" end) output tokens (est.) · ~$\($usd | .*100 | round / 100)\n" +
+        "     est. from the caveman 65% cut vs a verbose baseline · ponytail + codedb save on top\n\n" +
+        "unc stats — \($n) sessions\n" +
         "  output tokens   \($out)\n" +
         "  input tokens    \($in)\n" +
-        "  lines added     \($ins)\n" +
-        "  lines removed   \($del)\n" +
-        "  net LOC         \($ins - $del)\n" +
+        "  net LOC         \($ins - $del)  (+\($ins) / -\($del))\n" +
         (if $n > 0 then "  avg out/session \(($out / $n) | floor)" else "" end)
     ' "$LOG" ;;
   help|-h|--help) usage ;;

@@ -40,7 +40,9 @@ cat > "$HOME/.unc/sessions.ndjson" <<'JSON'
 JSON
 out="$(bash "$ROOT/bin/unc" stats)"
 check "session count" "$(grep -c '2 sessions' <<<"$out")" "1"
-check "net loc"       "$(grep -oE 'net LOC +[0-9]+' <<<"$out" | grep -oE '[0-9]+')" "5"
+check "net loc"       "$(grep -oE 'net LOC +[0-9]+' <<<"$out" | grep -oE '[0-9]+' | head -1)" "5"
+# out 100+300=400 -> saved = 400*0.65/0.35 = 742
+check "saved est"     "$(grep -oE 'saved you ~[0-9]+' <<<"$out" | grep -oE '[0-9]+')" "742"
 
 # --- on/off toggle ---
 bash "$ROOT/bin/unc" off >/dev/null; check "off writes flag" "$([ -f "$HOME/.unc/off" ] && echo y)" "y"
