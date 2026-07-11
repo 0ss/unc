@@ -22,14 +22,15 @@ printf 'a\nb\n' > "$repo/f.txt"; git -C "$repo" add .; git -C "$repo" commit -qm
 printf 'a\nb\nc\nd\n' > "$repo/f.txt"   # +2 lines, uncommitted
 
 tx="$tmp/tx.jsonl"
+# second row carries cache reads — input must count those too, not just input_tokens
 printf '%s\n' '{"message":{"usage":{"output_tokens":100,"input_tokens":500}}}' \
-              '{"message":{"usage":{"output_tokens":40,"input_tokens":10}}}' > "$tx"
+              '{"message":{"usage":{"output_tokens":40,"input_tokens":10,"cache_read_input_tokens":1000}}}' > "$tx"
 
 printf '{"transcript_path":"%s","cwd":"%s"}' "$tx" "$repo" | bash "$ROOT/hooks/unc-bench.sh"
 
 line="$(cat "$HOME/.unc/sessions.ndjson")"
 check "out tokens summed" "$(jq -r .out_tokens <<<"$line")" "140"
-check "in tokens summed"  "$(jq -r .in_tokens  <<<"$line")" "510"
+check "in tokens + cache" "$(jq -r .in_tokens  <<<"$line")" "1510"
 check "insertions"        "$(jq -r .insertions <<<"$line")" "2"
 
 # --- unc stats: aggregate two known rows ---

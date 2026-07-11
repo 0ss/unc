@@ -20,7 +20,8 @@ cwd="$(printf '%s' "$payload" | jq -r '.cwd // empty')"
 out=0; in=0
 if [ -n "$transcript" ] && [ -f "$transcript" ]; then
   out="$(jq -r 'select(.message.usage.output_tokens) | .message.usage.output_tokens' "$transcript" 2>/dev/null | awk '{s+=$1} END{print s+0}')"
-  in="$(jq -r 'select(.message.usage.input_tokens)  | .message.usage.input_tokens'  "$transcript" 2>/dev/null | awk '{s+=$1} END{print s+0}')"
+  # input is split into input_tokens + cache reads; the big context is cached, so sum both
+  in="$(jq -r 'select(.message.usage) | .message.usage | (.input_tokens // 0) + (.cache_read_input_tokens // 0) + (.cache_creation_input_tokens // 0)' "$transcript" 2>/dev/null | awk '{s+=$1} END{print s+0}')"
 fi
 
 files=0; ins=0; del=0
