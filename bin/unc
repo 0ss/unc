@@ -35,12 +35,16 @@ case "${1:-help}" in
     command -v jq >/dev/null 2>&1 || { echo "need jq for stats"; exit 1; }
     [ -f "$LOG" ] || { echo "no sessions logged yet — go build something."; exit 0; }
     # savings, done honestly. two modes:
-    #   MEASURED — once you have >=3 `unc off` sessions, we compare your own
-    #     on-cohort vs off-cohort means (tokens + code). that delta is YOUR
-    #     real reduction, not anyone's marketing number.
-    #   SEED — until then, fall back to published-ish ratios (caveman 65% out,
-    #     codedb ~20% context, ponytail 54% code) and nudge you to run `unc off`.
-    # ponytail: seed ratios are hand-wavy on purpose; measured mode replaces them.
+    #   MEASURED — once you have >=3 `unc off` sessions, compare your own
+    #     on vs off cohort means (tokens + code). that delta is YOUR real
+    #     reduction and it captures codedb's leaner-context effect for free.
+    #   SEED — until then, one tool per disjoint axis, each with its OWN
+    #     published number, no double-counting:
+    #       caveman  -> output tokens, 65% cut  => baseline out/0.35
+    #       ponytail -> code, 54% less          => baseline ins/0.46
+    #     codedb is deliberately NOT in seed: its 1600x win is per search
+    #     query, not per session, so guessing a session % would be a lie.
+    #     it shows up only once MEASURED mode has real data.
     # $/Mtok drifts + depends on your model -> knob.
     price="${UNC_PRICE:-15}"
     min_off="${UNC_MIN_OFF:-3}"
@@ -66,8 +70,7 @@ case "${1:-help}" in
                 loc: ($l | if . < 0 then 0 else . end | floor) }
           else
             { mode:"seed",
-              tok: ((($on|map(.out_tokens)|add // 0) * 0.65/0.35)
-                  + (($on|map(.in_tokens) |add // 0) * 0.25) | floor),
+              tok: (($on|map(.out_tokens)|add // 0) * 0.65/0.35 | floor),
               loc: (($on|map(.insertions)|add // 0) * 0.54/0.46 | floor) }
           end ) as $s
       | ( $s.tok / 1000000 * $price ) as $usd
@@ -75,7 +78,7 @@ case "${1:-help}" in
           then "  🦥 big unc MEASURED ~\($s.tok|k) tokens + ~\($s.loc) LOC saved · ~$\($usd|.*100|round/100)\n" +
                "     from your own A/B — \($non) on vs \($noff) off sessions. real shit.\n\n"
           else "  🦥 big unc reckons ~\($s.tok|k) tokens + ~\($s.loc) LOC saved · ~$\($usd|.*100|round/100)\n" +
-               "     (est · trust me bro) run `unc off` \($minoff)+ times to turn this into a measured A/B\n\n"
+               "     (est · trust me bro) caveman 65% output + ponytail 54% code · run `unc off` \($minoff)+ times for a real A/B (adds codedb)\n\n"
           end ) +
         "unc stats — \($n) sessions (\($non) on, \($noff) off)\n" +
         "  output tokens   \($out)\n" +

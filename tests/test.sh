@@ -41,9 +41,9 @@ JSON
 out="$(bash "$ROOT/bin/unc" stats)"
 check "session count" "$(grep -c '2 sessions' <<<"$out")" "1"
 check "net loc"       "$(grep -oE 'net LOC +[0-9]+' <<<"$out" | grep -oE '[0-9]+' | head -1)" "5"
-# no off-sessions -> SEED. (400*.65/.35 + 30*.25) floored = 750. ins 10 -> 11 LOC
+# no off-sessions -> SEED. caveman only: 400*.65/.35 floored = 742. ins 10 -> 11 LOC
 check "seed mode"       "$(grep -c 'trust me bro' <<<"$out")" "1"
-check "seed tokens"     "$(grep -oE 'reckons ~[0-9]+ tokens' <<<"$out" | grep -oE '[0-9]+')" "750"
+check "seed tokens"     "$(grep -oE 'reckons ~[0-9]+ tokens' <<<"$out" | grep -oE '[0-9]+')" "742"
 check "seed loc"        "$(grep -oE '\+ ~[0-9]+ LOC' <<<"$out" | grep -oE '[0-9]+')" "11"
 
 # --- measured mode: 2 on-rows vs 3 off-rows, real A/B ---
