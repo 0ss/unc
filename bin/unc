@@ -4,6 +4,7 @@ set -euo pipefail
 
 UNC_DIR="$HOME/.unc"
 LOG="$UNC_DIR/sessions.ndjson"
+VERSION="0.1.0"
 mkdir -p "$UNC_DIR"
 
 usage() {
@@ -14,6 +15,7 @@ unc — your lazy senior dev, equipped.
   unc on|off     turn the always-on rule on or off
   unc status     one-line status (for a statusline)
   unc where      print paths unc uses
+  unc version    print version
   unc help       this
 
 The rule (ponytail + caveman + codedb) and the benchmark run from hooks.
@@ -28,6 +30,7 @@ case "${1:-help}" in
   where)
     echo "log      $LOG"
     echo "flag     $UNC_DIR/off (present = off)" ;;
+  version|--version|-v) echo "unc $VERSION" ;;
   stats)
     command -v jq >/dev/null 2>&1 || { echo "need jq for stats"; exit 1; }
     [ -f "$LOG" ] || { echo "no sessions logged yet — go build something."; exit 0; }
@@ -43,7 +46,7 @@ case "${1:-help}" in
       | ( map(.deletions)  | add // 0 ) as $del
       | ( ($out * 0.65 / 0.35) | floor ) as $saved
       | ( $saved / 1000000 * $price ) as $usd
-      | "  🦴 unc saved you ~\(if $saved >= 1000 then "\(($saved/1000)|floor)k" else "\($saved)" end) output tokens (est.) · ~$\($usd | .*100 | round / 100)\n" +
+      | "  🦥 unc saved you ~\(if $saved >= 1000 then "\(($saved/1000)|floor)k" else "\($saved)" end) output tokens (est.) · ~$\($usd | .*100 | round / 100)\n" +
         "     est. from the caveman 65% cut vs a verbose baseline · ponytail + codedb save on top\n\n" +
         "unc stats — \($n) sessions\n" +
         "  output tokens   \($out)\n" +

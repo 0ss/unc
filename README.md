@@ -34,7 +34,7 @@ unc status     # one-liner, for a statusline
 ```
 
 ```
-🦴 unc saved you ~11k output tokens (est.) · ~$0.18
+🦥 unc saved you ~11k output tokens (est.) · ~$0.18
 unc stats — 6 sessions
   output tokens   6347
   net LOC         230
