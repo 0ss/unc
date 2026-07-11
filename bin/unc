@@ -13,8 +13,6 @@ unc — your lazy senior dev, equipped.
 
   unc stats            what the benchmark tracked + savings (honest, tiered)
   unc stats --share    a copy-paste receipt card for the timeline
-  unc stats --svg      render the card as a shareable sloth svg (~/.unc/receipt.svg)
-  unc stats --how      how the numbers are calculated (+ link to METHODOLOGY.md)
   unc on | off         turn the always-on rule on or off
   unc status           one-line status (for a statusline)
   unc where            print paths unc uses
@@ -26,18 +24,6 @@ The rule (ponytail + caveman + codedb) and the benchmark run from hooks.
 EOF
 }
 
-how() {
-  cat <<'EOF'
-big unc's math (a guesstimate — you only did each task once):
-
-  tokens saved = your output × 65%   (caveman)
-  lines saved  = your lines  × 54%   (ponytail)
-  $ saved      = tokens saved × UNC_PRICE   (output only, never cache)
-  codedb: counts queries × ~1500 tokens not read; not in $
-
-  different axes, no double-count. details → METHODOLOGY.md
-EOF
-}
 
 humanize() {  # 12655480 -> 12.6M ; 8300 -> 8k
   local n=${1:-0}
@@ -46,9 +32,17 @@ humanize() {  # 12655480 -> 12.6M ; 8300 -> 8k
   else printf '%d' "$n"; fi
 }
 
-seg() { local e=$'\033' n="$2" i; printf '%s[38;2;%sm' "$e" "$1"; for ((i=0;i<n;i++)); do printf '█'; done; }
+render_bar() {  # label pct rgb note
+  local e=$'\033' r=$'\033[0m'
+  local label="$1" pct="$2" rgb="$3" note="$4" n i
+  n=$((pct/10)); [ "$n" -gt 10 ] && n=10; [ "$n" -lt 0 ] && n=0
+  printf '   %s[38;2;200;165;115m%-8s%s ' "$e" "$label" "$r"
+  printf '%s[38;2;%sm' "$e" "$rgb"; i=0; while [ "$i" -lt "$n" ]; do printf '█'; i=$((i+1)); done
+  printf '%s[38;2;70;55;40m' "$e"; while [ "$i" -lt 10 ]; do printf '░'; i=$((i+1)); done
+  printf '%s  %s[38;2;170;140;110m%s%s\n' "$r" "$e" "$note" "$r"
+}
 
-# the receipt card — warm/brown truecolor, 🦥 header, one combined loadout bar.
+# the receipt card — warm/brown truecolor, 🦥 header, three bars.
 # rendered in bash so the text is free of jq escaping. needs a truecolor terminal.
 render_card() {  # tok usd opct conf turns cdbq cdbsaved
   local e=$'\033' r=$'\033[0m' b=$'\033[1m'
@@ -56,10 +50,12 @@ render_card() {  # tok usd opct conf turns cdbq cdbsaved
   printf '\n   🦥  %s[38;2;212;170;110m%sunc wrapped%s   %s[38;2;150;120;85m%s%s\n\n' "$e" "$b" "$r" "$e" "$conf" "$r"
   printf '   %s[38;2;236;186;96m%s%s%s   %s[38;2;190;160;120moutput tokens saved%s   %s[38;2;230;170;80m~$%s%s\n\n' \
     "$e" "$b" "$(humanize "$tok")" "$r" "$e" "$r" "$e" "$usd" "$r"
-  # one combined loadout bar — three tool-colored segments
-  printf '   '; seg '208;132;60' 9; seg '222;176;92' 8; seg '150;110;70' 7; printf '%s\n' "$r"
-  printf '   %s[38;2;170;140;110mcaveman -65%% out · ponytail -54%% code · codedb %sq%s\n\n' "$e" "$cdbq" "$r"
-  printf '   %s[38;2;140;120;95m%s turns · trust me bro · math → unc stats --how · github.com/0ss/unc%s\n\n' "$e" "$turns" "$r"
+  render_bar "output"  "$opct" '208;132;60'  "-${opct}% caveman"
+  render_bar "code"    54      '222;176;92'  "-54% ponytail est"
+  render_bar "context" 100     '150;110;70'  "codedb ${cdbq} queries · ~$(humanize "$cdbsav") not read"
+  printf '\n   %s[38;2;170;140;110mcount words the AI wrote → guess what it skipped → × price%s\n' "$e" "$r"
+  printf '   %s[38;2;140;120;95mguesstimate · caveman -65%% · output tokens only · trust me bro%s\n\n' "$e" "$r"
+  printf '   %s[38;2;140;120;95m%s turns · github.com/0ss/unc%s\n\n' "$e" "$turns" "$r"
 }
 
 case "${1:-help}" in
@@ -76,21 +72,18 @@ case "${1:-help}" in
     echo "uninstaller not found — grab it: bash <(curl -fsSL https://raw.githubusercontent.com/0ss/unc/main/uninstall.sh)"; exit 1 ;;
   version|--version|-v) echo "unc $VERSION" ;;
   stats)
-    case "${2:-}" in --how) how; exit 0 ;; esac
     command -v jq >/dev/null 2>&1 || { echo "need jq for stats"; exit 1; }
     [ -f "$LOG" ] || { echo "no sessions logged yet — go build something."; exit 0; }
-    share=0; svg=0
-    for a in "$@"; do case "$a" in --share) share=1 ;; --svg) svg=1; share=1 ;; esac; done
-    # savings, done honestly — see `unc stats --how` / METHODOLOGY.md.
-    #   MEASURED: words-per-line-of-code, on vs off, median, output-only $.
-    #     the one thing your own logs can actually prove.
-    #   ESTIMATE (seed): your real output tokens * ponytail's published -22%.
-    #     labeled "trust me bro" — an extrapolation, not a measurement.
-    #   LINES saved is always a ponytail-lab estimate (-54%): no counterfactual.
+    share=0; [ "${2:-}" = "--share" ] && share=1
+    # savings, done honestly — see METHODOLOGY.md.
+    #   rows are cumulative per session -> stats de-dupes (max per session), never sums.
+    #   ESTIMATE (seed): output tokens * caveman -65% ; lines * ponytail -54%.
+    #     labeled "trust me bro" — an extrapolation, not a measurement, output-only $.
+    #   MEASURED (needs off-sessions): words-per-line on vs off, median. rarely hit.
     price="${UNC_PRICE:-15}"
     min_off="${UNC_MIN_OFF:-3}"
     codeq="${UNC_CODEDB_PER_Q:-1500}"   # tokens a codedb query saves vs grep+full-file read
-    result="$(jq -s -r --argjson price "$price" --argjson minoff "$min_off" --argjson share "$share" --argjson svg "$svg" --argjson codeq "$codeq" '
+    result="$(jq -s -r --argjson price "$price" --argjson minoff "$min_off" --argjson share "$share" --argjson codeq "$codeq" '
       def k: if . >= 1000 then "\((./1000)|floor)k" else "\(.|floor)" end;
       def usd: (.*100|round/100);
       def clamp: if . < 0 then 0 elif . > 100 then 100 else . end;
@@ -143,32 +136,7 @@ case "${1:-help}" in
           else "estimate" end ) as $conf
       # ansi
       | "[0m" as $x | "[1m" as $b | "[2m" as $d
-      | if $svg == 1 then
-          "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"860\" height=\"460\" font-family=\"ui-monospace,Menlo,monospace\">"
-          + "<defs><linearGradient id=\"bg\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"1\"><stop offset=\"0\" stop-color=\"#0d2018\"/><stop offset=\"1\" stop-color=\"#173a28\"/></linearGradient>"
-          + "<linearGradient id=\"hot\" x1=\"0\" y1=\"0\" x2=\"1\" y2=\"0\"><stop offset=\"0\" stop-color=\"#5eead4\"/><stop offset=\"1\" stop-color=\"#a7f3c8\"/></linearGradient></defs>"
-          + "<rect width=\"860\" height=\"460\" rx=\"28\" fill=\"url(#bg)\"/><rect x=\"7\" y=\"7\" width=\"846\" height=\"446\" rx=\"22\" fill=\"none\" stroke=\"#2f5c43\" stroke-width=\"2\"/>"
-          + "<g transform=\"translate(628,52)\">"
-          + "<line x1=\"-30\" y1=\"0\" x2=\"150\" y2=\"0\" stroke=\"#4a3d2e\" stroke-width=\"10\" stroke-linecap=\"round\"/>"
-          + "<path d=\"M28,10 q-14,-18 -2,-32\" stroke=\"#7a6249\" stroke-width=\"11\" fill=\"none\" stroke-linecap=\"round\"/>"
-          + "<path d=\"M92,10 q14,-18 2,-32\" stroke=\"#7a6249\" stroke-width=\"11\" fill=\"none\" stroke-linecap=\"round\"/>"
-          + "<ellipse cx=\"60\" cy=\"72\" rx=\"48\" ry=\"54\" fill=\"#7a6249\"/><ellipse cx=\"60\" cy=\"78\" rx=\"34\" ry=\"38\" fill=\"#c4a878\"/>"
-          + "<ellipse cx=\"46\" cy=\"72\" rx=\"10\" ry=\"14\" fill=\"#5c4a38\"/><ellipse cx=\"74\" cy=\"72\" rx=\"10\" ry=\"14\" fill=\"#5c4a38\"/>"
-          + "<circle cx=\"46\" cy=\"74\" r=\"3.5\" fill=\"#141414\"/><circle cx=\"74\" cy=\"74\" r=\"3.5\" fill=\"#141414\"/>"
-          + "<ellipse cx=\"60\" cy=\"86\" rx=\"5\" ry=\"3.5\" fill=\"#3a2e22\"/><path d=\"M52,94 q8,7 16,0\" stroke=\"#5c4a38\" stroke-width=\"2.5\" fill=\"none\" stroke-linecap=\"round\"/>"
-          + "</g>"
-          + "<text x=\"54\" y=\"80\" fill=\"#7dd6a0\" font-size=\"30\" font-weight=\"bold\">unc wrapped</text>"
-          + "<text x=\"56\" y=\"106\" fill=\"#4f7a63\" font-size=\"16\">\($conf) · trust me bro</text>"
-          + "<text x=\"52\" y=\"214\" fill=\"url(#hot)\" font-size=\"80\" font-weight=\"bold\">\($s.tok|k)</text>"
-          + "<text x=\"58\" y=\"246\" fill=\"#cdeede\" font-size=\"20\">output tokens saved · ~$\($usd|usd)</text>"
-          + "<g transform=\"translate(56,290)\" font-size=\"15\">"
-          + "<text x=\"0\" y=\"12\" fill=\"#9fe0bd\">output</text><rect x=\"92\" y=\"1\" width=\"320\" height=\"13\" rx=\"6\" fill=\"#1f3a2b\"/><rect x=\"92\" y=\"1\" width=\"\(($s.tokpct/100*320))\" height=\"13\" rx=\"6\" fill=\"#5eead4\"/><text x=\"424\" y=\"12\" fill=\"#6f9a83\">-\($s.tokpct|floor)% caveman</text>"
-          + "<text x=\"0\" y=\"40\" fill=\"#9fe0bd\">code</text><rect x=\"92\" y=\"29\" width=\"320\" height=\"13\" rx=\"6\" fill=\"#1f3a2b\"/><rect x=\"92\" y=\"29\" width=\"172\" height=\"13\" rx=\"6\" fill=\"#7dd6a0\"/><text x=\"424\" y=\"40\" fill=\"#6f9a83\">-54% ponytail est</text>"
-          + "<text x=\"0\" y=\"68\" fill=\"#9fe0bd\">context</text><rect x=\"92\" y=\"57\" width=\"320\" height=\"13\" rx=\"6\" fill=\"#4f7a63\"/><text x=\"424\" y=\"68\" fill=\"#6f9a83\">codedb leaner in</text>"
-          + "</g>"
-          + "<text x=\"56\" y=\"426\" fill=\"#4f7a63\" font-size=\"14\">\($n) sessions · github.com/0ss/unc · math → unc stats --how</text>"
-          + "</svg>"
-        elif $share == 1 then
+      | if $share == 1 then
           # values only — the pretty terminal card is rendered in bash (truecolor)
           "\($s.tok)|\($usd|usd)|\($s.tokpct|floor)|\($conf)|\($n)|\($non)|\($cdb)|\($cdbsaved)"
         else
@@ -186,10 +154,7 @@ case "${1:-help}" in
           "  lines saved     ~\($s.loc)  \($d)(ponytail lab est, -54%)\($x)"
         end
     ' "$LOG")"
-    if [ "$svg" = 1 ]; then
-      printf '%s\n' "$result" > "$UNC_DIR/receipt.svg"
-      echo "🦥 wrote $UNC_DIR/receipt.svg — open it in a browser / screenshot it"
-    elif [ "$share" = 1 ]; then
+    if [ "$share" = 1 ]; then
       IFS='|' read -r TOK USD OPCT CONF NS NON CDBQ CDBSAV <<EOF
 $result
 EOF

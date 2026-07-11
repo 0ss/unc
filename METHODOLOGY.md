@@ -1,6 +1,6 @@
 # how unc counts
 
-Short version: `unc stats --how`. This is the auditable one.
+The auditable long version. The card shows the one-liner.
 
 ## the honest problem
 You do each task once, rule-on. There's no un-tooled version of the same task to

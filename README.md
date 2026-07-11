@@ -32,18 +32,18 @@ unc stats --share
 ```
 
 ```
-  🦥 unc wrapped  estimate
+   🦥  unc wrapped   estimate
 
-     280k output tokens saved   ~$4.20
+   280k   output tokens saved   ~$4.20
 
-     output   ██████░░░░  -65% · caveman
-     code     █████░░░░░  -54% · ponytail est
-     context  ██████████  codedb · leaner in
+   output   ██████░░░░  -65% caveman
+   code     █████░░░░░  -54% ponytail est
+   context  ██████████  codedb 12 queries · ~18k not read
 
-     12 sessions · 12 on / 0 off · math → unc stats --how
+   34 turns · trust me bro · github.com/0ss/unc
 ```
 
-Screenshot it, post it. The number is always derived from **your** real logged usage — an empty log shows nothing, and the card always wears its tier so an estimate can never masquerade as proof.
+Warm truecolor in a real terminal. The number is always derived from **your** real logged usage — an empty log shows nothing, and the card always wears its tier so an estimate can never masquerade as proof.
 
 ## honest by design
 
@@ -55,7 +55,7 @@ unc will not lie to you, which is the whole point:
 - **Lines saved** is *always* a ponytail lab estimate — you can't measure the lines you didn't write.
 - **$ is output-only.** Cache reads are shown but never monetized (they're ~10× cheaper). Tune with `UNC_PRICE`.
 
-Full formulas + sources: **[METHODOLOGY.md](METHODOLOGY.md)** or `unc stats --how`.
+Full formulas + sources: **[METHODOLOGY.md](METHODOLOGY.md)**.
 
 ## use it
 
@@ -64,9 +64,9 @@ Full formulas + sources: **[METHODOLOGY.md](METHODOLOGY.md)** or `unc stats --ho
 ```bash
 unc stats          # numbers + honest savings
 unc stats --share  # the receipt card
-unc stats --how    # how the numbers are calculated
 unc on | off       # toggle the rule
 unc status         # one-liner, for a statusline
+unc uninstall      # remove unc (keeps your log)
 ```
 
 ## what it touches (and easy off)

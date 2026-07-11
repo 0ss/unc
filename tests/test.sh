@@ -73,8 +73,6 @@ check "share card"     "$(grep -c 'unc wrapped' <<<"$sc")" "1"
 check "share tokens"   "$(grep 'output tokens saved' <<<"$sc" | grep -oE '[0-9]+' | head -1)" "100"
 check "share loc est"  "$(grep -c 'ponytail' <<<"$sc")" "1"
 
-# --- --how prints methodology, no crash on empty-ish ---
-check "how link" "$(bash "$ROOT/bin/unc" stats --how | grep -c 'METHODOLOGY.md')" "1"
 
 # --- on/off toggle ---
 bash "$ROOT/bin/unc" off >/dev/null; check "off writes flag" "$([ -f "$HOME/.unc/off" ] && echo y)" "y"
