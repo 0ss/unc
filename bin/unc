@@ -34,29 +34,50 @@ case "${1:-help}" in
   stats)
     command -v jq >/dev/null 2>&1 || { echo "need jq for stats"; exit 1; }
     [ -f "$LOG" ] || { echo "no sessions logged yet — go build something."; exit 0; }
-    # the "saved" number is a vibe, not a measurement (no A/B baseline). we
-    # combine each tool's published-ish effect:
-    #   caveman  -> output cut, verbose baseline = out/0.35   (65%)
-    #   codedb   -> ~20% leaner context on input              (trust me bro)
-    #   ponytail -> ~54% less code, so lines you didn't write
-    # ponytail: these ratios are hand-wavy, tune them if you ever measure real.
+    # savings, done honestly. two modes:
+    #   MEASURED — once you have >=3 `unc off` sessions, we compare your own
+    #     on-cohort vs off-cohort means (tokens + code). that delta is YOUR
+    #     real reduction, not anyone's marketing number.
+    #   SEED — until then, fall back to published-ish ratios (caveman 65% out,
+    #     codedb ~20% context, ponytail 54% code) and nudge you to run `unc off`.
+    # ponytail: seed ratios are hand-wavy on purpose; measured mode replaces them.
     # $/Mtok drifts + depends on your model -> knob.
     price="${UNC_PRICE:-15}"
-    jq -s -r --argjson price "$price" '
+    min_off="${UNC_MIN_OFF:-3}"
+    jq -s -r --argjson price "$price" --argjson minoff "$min_off" '
       def k: if . >= 1000 then "\((./1000)|floor)k" else "\(.)" end;
-      ( length ) as $n
-      | ( map(.out_tokens) | add // 0 ) as $out
-      | ( map(.in_tokens)  | add // 0 ) as $in
-      | ( map(.insertions) | add // 0 ) as $ins
-      | ( map(.deletions)  | add // 0 ) as $del
-      | ( ($out * 0.65 / 0.35) | floor ) as $cav
-      | ( ($in  * 0.25)        | floor ) as $cdb
-      | ( $cav + $cdb )                  as $tok
-      | ( ($ins * 0.54 / 0.46) | floor ) as $loc
-      | ( $tok / 1000000 * $price )      as $usd
-      | "  🦥 big unc reckons he saved you ~\($tok|k) tokens + ~\($loc) LOC · ~$\($usd | .*100 | round / 100)\n" +
-        "     (est. · trust me bro) caveman shrank output, codedb kept context lean, ponytail wrote less code\n\n" +
-        "unc stats — \($n) sessions\n" +
+      def mean(f): if length>0 then (map(f)|add)/length else 0 end;
+      ( [ .[] | select((.rule // "on") == "on")  ] ) as $on
+      | ( [ .[] | select((.rule // "on") == "off") ] ) as $off
+      | ( length ) as $n
+      | ( $on | length ) as $non
+      | ( $off | length ) as $noff
+      | ( map(.out_tokens)|add // 0 ) as $out
+      | ( map(.in_tokens) |add // 0 ) as $in
+      | ( map(.insertions)|add // 0 ) as $ins
+      | ( map(.deletions) |add // 0 ) as $del
+      | ( if $noff >= $minoff
+          then
+            ( (($off|mean(.out_tokens)) - ($on|mean(.out_tokens))
+             + ($off|mean(.in_tokens))  - ($on|mean(.in_tokens))) * $non ) as $t
+            | ( (($off|mean(.insertions)) - ($on|mean(.insertions))) * $non ) as $l
+            | { mode:"measured",
+                tok: ($t | if . < 0 then 0 else . end | floor),
+                loc: ($l | if . < 0 then 0 else . end | floor) }
+          else
+            { mode:"seed",
+              tok: ((($on|map(.out_tokens)|add // 0) * 0.65/0.35)
+                  + (($on|map(.in_tokens) |add // 0) * 0.25) | floor),
+              loc: (($on|map(.insertions)|add // 0) * 0.54/0.46 | floor) }
+          end ) as $s
+      | ( $s.tok / 1000000 * $price ) as $usd
+      | ( if $s.mode == "measured"
+          then "  🦥 big unc MEASURED ~\($s.tok|k) tokens + ~\($s.loc) LOC saved · ~$\($usd|.*100|round/100)\n" +
+               "     from your own A/B — \($non) on vs \($noff) off sessions. real shit.\n\n"
+          else "  🦥 big unc reckons ~\($s.tok|k) tokens + ~\($s.loc) LOC saved · ~$\($usd|.*100|round/100)\n" +
+               "     (est · trust me bro) run `unc off` \($minoff)+ times to turn this into a measured A/B\n\n"
+          end ) +
+        "unc stats — \($n) sessions (\($non) on, \($noff) off)\n" +
         "  output tokens   \($out)\n" +
         "  input tokens    \($in)\n" +
         "  net LOC         \($ins - $del)  (+\($ins) / -\($del))\n" +

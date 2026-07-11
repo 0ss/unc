@@ -38,8 +38,11 @@ if git -C "$cwd" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 fi
 files=${files:-0}; ins=${ins:-0}; del=${del:-0}
 
+# tag the row with whether the rule was on — this is what makes the A/B real
+rule="on"; [ -f "$HOME/.unc/off" ] && rule="off"
+
 ts="$(date -u +%FT%TZ)"
-printf '{"ts":"%s","cwd":"%s","out_tokens":%s,"in_tokens":%s,"files":%s,"insertions":%s,"deletions":%s}\n' \
-  "$ts" "$cwd" "${out:-0}" "${in:-0}" "$files" "$ins" "$del" >> "$log"
+printf '{"ts":"%s","cwd":"%s","rule":"%s","out_tokens":%s,"in_tokens":%s,"files":%s,"insertions":%s,"deletions":%s}\n' \
+  "$ts" "$cwd" "$rule" "${out:-0}" "${in:-0}" "$files" "$ins" "$del" >> "$log"
 
 exit 0
