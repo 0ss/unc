@@ -1,4 +1,6 @@
-# unc
+# unc 🦥
+
+[![test](https://github.com/0ss/unc/actions/workflows/test.yml/badge.svg)](https://github.com/0ss/unc/actions/workflows/test.yml)
 
 > the uncle who's been here longer than the version control. writes less code, says less, ships more. now he lives in your agent.
 

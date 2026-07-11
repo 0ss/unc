@@ -41,8 +41,9 @@ JSON
 out="$(bash "$ROOT/bin/unc" stats)"
 check "session count" "$(grep -c '2 sessions' <<<"$out")" "1"
 check "net loc"       "$(grep -oE 'net LOC +[0-9]+' <<<"$out" | grep -oE '[0-9]+' | head -1)" "5"
-# out 100+300=400 -> saved = 400*0.65/0.35 = 742
-check "saved est"     "$(grep -oE 'saved you ~[0-9]+' <<<"$out" | grep -oE '[0-9]+')" "742"
+# out 400 -> caveman 742; in 30 -> codedb 7; total tokens 749. ins 10 -> ponytail 11 LOC
+check "combined tokens" "$(grep -oE 'saved you ~[0-9]+ tokens' <<<"$out" | grep -oE '[0-9]+')" "749"
+check "combined loc"    "$(grep -oE '\+ ~[0-9]+ LOC' <<<"$out" | grep -oE '[0-9]+')" "11"
 
 # --- on/off toggle ---
 bash "$ROOT/bin/unc" off >/dev/null; check "off writes flag" "$([ -f "$HOME/.unc/off" ] && echo y)" "y"
