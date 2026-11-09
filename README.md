@@ -2,15 +2,15 @@
 
 [![test](https://github.com/0ss/unc/actions/workflows/test.yml/badge.svg)](https://github.com/0ss/unc/actions/workflows/test.yml)
 
-> the uncle who's been here longer than the version control. writes less code, says less, ships more. now he rides shotgun in your agent.
+> writes less code, says less, ships more.
 
-unc is a loadout, not a tool. one command equips your AI agent with three things that already work, binds them under one always-on rule, and keeps an honest receipt of what it saved you.
+Makes your agent write less and say less. One install.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/0ss/unc/main/install.sh | bash
 ```
 
-restart your agent. done. works with anything that reads a rule and lets a hook log a turn — **Claude, Codex, Cursor, Gemini**.
+Restart your agent. Done. Works with anything that reads a rule and lets a hook log a turn — **Claude, Codex, Cursor, Gemini**.
 
 ## the loadout
 
@@ -47,15 +47,7 @@ Warm truecolor in a real terminal. The number is always derived from **your** re
 
 ## honest by design
 
-unc will not lie to you, which is the whole point:
-
-- **You only do each task once, rule-on** — so there's no true baseline to subtract. unc never invents one. (ponytail's own `/ponytail-gain` refuses to for the same reason.)
-- **ESTIMATE** (what most people see forever): each tool's own published number on its own axis — caveman `-65%` output, ponytail `-54%` code, codedb leaner context — scaled to your real usage, labeled *trust me bro*. An extrapolation, not a measurement.
-- **MEASURED** (if you ever run `unc off` a few times): words-per-line-of-code, rule-on vs rule-off, from your own logs. Median, normalized per line, confidence scales with sample size.
-- **Lines saved** is *always* a ponytail lab estimate — you can't measure the lines you didn't write.
-- **$ is output-only.** Cache reads are shown but never monetized (they're ~10× cheaper). Tune with `UNC_PRICE`.
-
-Full formulas + sources: **[METHODOLOGY.md](METHODOLOGY.md)**.
+The number comes from **your** real logs — never a made-up baseline. Until you run `unc off` a few times it's a labeled estimate (*trust me bro*), and the card always says which. Full formulas + sources: **[METHODOLOGY.md](METHODOLOGY.md)**.
 
 ## use it
 
